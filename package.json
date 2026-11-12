@@ -1,0 +1,13 @@
+{
+  "name": "aim-long-service-request-form",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local endpoint for AIM LONG SPARES AND REPAIRS service requests",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.10",
+    "nodemailer": "^10.5.0"
+  }
+}

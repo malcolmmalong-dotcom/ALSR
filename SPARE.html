@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Request service and tell us how we can help.">
+    <title>Request a Service</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            padding: 48px 20px;
+            font-family: Arial, Helvetica, sans-serif;
+            color: #1f2937;
+            background: #f3f6f8;
+        }
+        main {
+            width: min(100%, 720px);
+            margin: 0 auto;
+            padding: 38px;
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 12px 35px rgba(25, 45, 65, .1);
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            margin-bottom: 28px;
+            padding-bottom: 22px;
+            border-bottom: 1px solid #e4eaee;
+        }
+        .brand-mark {
+            display: grid;
+            width: 54px;
+            height: 54px;
+            flex: 0 0 54px;
+            place-items: center;
+            border-radius: 12px;
+            background: #176b91;
+            color: #fff;
+            font-size: 1.25rem;
+            font-weight: 800;
+            letter-spacing: .04em;
+        }
+        .brand-name { margin: 0; color: #163b58; font-size: 1.08rem; font-weight: 800; letter-spacing: .035em; }
+        .brand-tagline { margin: 4px 0 0; color: #64727d; font-size: .82rem; letter-spacing: .11em; }
+        h1 { margin: 0 0 10px; color: #163b58; font-size: 2rem; }
+        .intro { margin: 0 0 28px; color: #5c6873; line-height: 1.55; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .field { display: flex; flex-direction: column; gap: 8px; }
+        .field.full { grid-column: 1 / -1; }
+        label { font-size: .95rem; font-weight: 600; }
+        input, select, textarea {
+            width: 100%;
+            padding: 12px 13px;
+            border: 1px solid #cbd5dc;
+            border-radius: 7px;
+            background: #fff;
+            color: #1f2937;
+            font: inherit;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: 3px solid rgba(26, 111, 157, .18);
+            border-color: #1a6f9d;
+        }
+        textarea { min-height: 145px; resize: vertical; }
+        .hint { margin: 0; color: #6b7780; font-size: .85rem; }
+        input[type="file"] { padding: 10px; }
+        .photo-preview { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+        .photo-preview img { width: 100px; height: 78px; object-fit: cover; border-radius: 6px; border: 1px solid #d5dee4; }
+        button {
+            margin-top: 24px;
+            padding: 13px 22px;
+            border: 0;
+            border-radius: 7px;
+            background: #176b91;
+            color: #fff;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        button:hover { background: #105674; }
+        @media (max-width: 560px) {
+            body { padding: 20px 12px; }
+            main { padding: 25px 20px; }
+            h1 { font-size: 1.65rem; }
+            .form-grid { grid-template-columns: 1fr; }
+            .field.full { grid-column: auto; }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <header class="brand" aria-label="AIM LONG Spares and Repairs">
+            <div class="brand-mark" aria-hidden="true">AL</div>
+            <div>
+                <p class="brand-name">AIM LONG</p>
+                <p class="brand-tagline">SPARES AND REPAIRS</p>
+            </div>
+        </header>
+        <h1>Request a Service</h1>
+        <p class="intro">Tell us what’s going on and how to reach you. Our team will get back to you to discuss the next steps.</p>
+
+        <form action="/api/service-requests" method="post" enctype="multipart/form-data">
+            <div class="form-grid">
+                <div class="field">
+                    <label for="name">Full name *</label>
+                    <input type="text" id="name" name="name" autocomplete="name" required>
+                </div>
+                <div class="field">
+                    <label for="phone">Phone number *</label>
+                    <input type="tel" id="phone" name="phone" autocomplete="tel" required>
+                </div>
+                <div class="field full">
+                    <label for="email">Email address *</label>
+                    <input type="email" id="email" name="email" autocomplete="email" required>
+                </div>
+                <div class="field">
+                    <label for="service">Service needed *</label>
+                    <select id="service" name="service" required>
+                        <option value="" disabled selected>Select a service</option>
+                        <option value="repair">Repair</option>
+                        <option value="maintenance">Maintenance</option>
+                        <option value="installation">Installation</option>
+                        <option value="inspection">Inspection / diagnosis</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="location">Service location</label>
+                    <input type="text" id="location" name="location" autocomplete="street-address" placeholder="Suburb or town">
+                </div>
+                <div class="field full">
+                    <label for="problem">Describe the problem *</label>
+                    <textarea id="problem" name="problem" placeholder="What is happening, and when did it start? Include any useful details." required></textarea>
+                    <p class="hint">Please don’t include passwords or other sensitive information.</p>
+                </div>
+                <div class="field full">
+                    <label for="vehicle-photos">Vehicle photos</label>
+                    <input type="file" id="vehicle-photos" name="vehicle_photos[]" accept="image/*" multiple>
+                    <p class="hint">Add clear photos that show the vehicle or the issue (up to 5 images).</p>
+                    <div class="photo-preview" id="photo-preview" aria-live="polite"></div>
+                </div>
+                <div class="field full">
+                    <label for="availability">Preferred date or time</label>
+                    <input type="text" id="availability" name="availability" placeholder="For example, weekday mornings">
+                </div>
+            </div>
+            <button type="submit">Send service request</button>
+        </form>
+    </main>
+    <script>
+        const photoInput = document.getElementById('vehicle-photos');
+        const photoPreview = document.getElementById('photo-preview');
+        photoInput.addEventListener('change', () => {
+            photoPreview.replaceChildren();
+            const files = Array.from(photoInput.files || []).slice(0, 5);
+            if (photoInput.files.length > 5) {
+                alert('Please select no more than 5 photos.');
+                photoInput.value = '';
+                return;
+            }
+            for (const file of files) {
+                if (!file.type.startsWith('image/')) continue;
+                const image = document.createElement('img');
+                image.src = URL.createObjectURL(file);
+                image.alt = `Selected vehicle photo: ${file.name}`;
+                photoPreview.append(image);
+            }
+        });
+    </script>
+</body>
+</html>
