@@ -6,10 +6,20 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 require('dotenv').config();
 const nodemailer = require('nodemailer');
+const { createClient } = require('@supabase/supabase-js');
 
 const ROOT = __dirname;
 const UPLOAD_ROOT = path.join(ROOT, 'submissions');
 const PORT = Number(process.env.PORT) || 3000;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_PHOTOS_BUCKET = process.env.SUPABASE_PHOTOS_BUCKET || 'service-request-photos';
+if (Boolean(SUPABASE_URL) !== Boolean(SUPABASE_SERVICE_ROLE_KEY)) {
+    throw new Error('Set both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or leave both unset for local file storage.');
+}
+const supabase = SUPABASE_URL ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+}) : null;
 const MAX_REQUEST_BYTES = 15 * 1024 * 1024;
 const MAX_PHOTOS = 5;
 const MAX_FIELD_LENGTHS = { name: 120, phone: 40, email: 254, service: 40, location: 200, problem: 5000, availability: 200 };
@@ -127,33 +137,72 @@ async function handleSubmission(req, res) {
 
     const id = `${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomBytes(4).toString('hex')}`;
     const submissionDir = path.join(UPLOAD_ROOT, id);
-    await fs.promises.mkdir(UPLOAD_ROOT, { recursive: true });
-    await fs.promises.mkdir(submissionDir, { recursive: false });
+    if (!supabase) {
+        await fs.promises.mkdir(UPLOAD_ROOT, { recursive: true });
+        await fs.promises.mkdir(submissionDir, { recursive: false });
+    }
     try {
         const savedPhotos = [];
         for (const [index, photo] of photos.entries()) {
             const extension = path.extname(photo.filename).toLowerCase();
             const filename = `vehicle-${index + 1}${extension}`;
-            await fs.promises.writeFile(path.join(submissionDir, filename), photo.data, { flag: 'wx' });
-            savedPhotos.push({ filename, contentType: IMAGE_TYPES[extension].mime, size: photo.data.length });
+            const savedPhoto = { filename, contentType: IMAGE_TYPES[extension].mime, size: photo.data.length };
+            if (supabase) savedPhoto.storagePath = `${id}/${filename}`;
+            else await fs.promises.writeFile(path.join(submissionDir, filename), photo.data, { flag: 'wx' });
+            savedPhotos.push(savedPhoto);
         }
         const record = { id, receivedAt: new Date().toISOString(), ...fields, photos: savedPhotos };
-        const temporaryRecord = path.join(submissionDir, 'request.json.tmp');
-        await fs.promises.writeFile(temporaryRecord, `${JSON.stringify(record, null, 2)}\n`, { flag: 'wx' });
-        await fs.promises.rename(temporaryRecord, path.join(submissionDir, 'request.json'));
-        await emailServiceRequest(record, submissionDir, photos);
+        if (supabase) await saveSubmissionToSupabase(record, photos);
+        else {
+            const temporaryRecord = path.join(submissionDir, 'request.json.tmp');
+            await fs.promises.writeFile(temporaryRecord, `${JSON.stringify(record, null, 2)}\n`, { flag: 'wx' });
+            await fs.promises.rename(temporaryRecord, path.join(submissionDir, 'request.json'));
+        }
+        await emailServiceRequest(record, photos);
         return send(res, 201, `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Request received</title><body style="font:16px Arial,sans-serif;max-width:640px;margin:12vh auto;padding:24px;color:#1f2937"><h1>Thank you, ${escapeHtml(fields.name)}.</h1><p>Your service request has been sent to AIM LONG SPARES AND REPAIRS.</p><p><a href="/">Return to the request form</a></p></body></html>`, 'text/html; charset=utf-8');
     } catch (error) {
-        if (error.code !== 'EMAIL_DELIVERY_FAILED') await fs.promises.rm(submissionDir, { recursive: true, force: true }).catch(() => {});
+        if (!supabase && error.code !== 'EMAIL_DELIVERY_FAILED') await fs.promises.rm(submissionDir, { recursive: true, force: true }).catch(() => {});
         if (error.code === 'EMAIL_DELIVERY_FAILED') {
-            console.error('Email delivery failed; request retained locally:', error.cause?.message || error.message);
+            console.error(`Email delivery failed; request retained ${supabase ? 'in Supabase' : 'locally'}:`, error.cause?.message || error.message);
             return send(res, 503, 'Your request was saved but could not be emailed. Please contact us directly or try again later.');
         }
         throw error;
     }
 }
 
-async function emailServiceRequest(record, submissionDir, photos) {
+async function saveSubmissionToSupabase(record, photos) {
+    const uploadedPaths = [];
+    try {
+        for (const [index, photo] of photos.entries()) {
+            const extension = path.extname(photo.filename).toLowerCase();
+            const storagePath = `${record.id}/vehicle-${index + 1}${extension}`;
+            const { error } = await supabase.storage.from(SUPABASE_PHOTOS_BUCKET).upload(storagePath, photo.data, {
+                contentType: IMAGE_TYPES[extension].mime,
+                upsert: false,
+            });
+            if (error) throw error;
+            uploadedPaths.push(storagePath);
+        }
+        const { error } = await supabase.from('service_requests').insert({
+            id: record.id,
+            received_at: record.receivedAt,
+            name: record.name,
+            phone: record.phone,
+            email: record.email,
+            service: record.service,
+            location: record.location || null,
+            problem: record.problem,
+            availability: record.availability || null,
+            photos: record.photos,
+        });
+        if (error) throw error;
+    } catch (error) {
+        if (uploadedPaths.length) await supabase.storage.from(SUPABASE_PHOTOS_BUCKET).remove(uploadedPaths).catch(() => {});
+        throw error;
+    }
+}
+
+async function emailServiceRequest(record, photos) {
     const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
     const SMTP_PORT = process.env.SMTP_PORT || '465';
     const SMTP_USER = process.env.SMTP_USER;
@@ -197,7 +246,7 @@ async function emailServiceRequest(record, submissionDir, photos) {
             text: lines.join('\n'),
             attachments: photos.map((photo, index) => ({
                 filename: `vehicle-${index + 1}${path.extname(photo.filename).toLowerCase()}`,
-                path: path.join(submissionDir, `vehicle-${index + 1}${path.extname(photo.filename).toLowerCase()}`),
+                content: photo.data,
                 contentType: IMAGE_TYPES[path.extname(photo.filename).toLowerCase()].mime,
             })),
         });
@@ -231,4 +280,4 @@ const server = http.createServer(async (req, res) => {
     }
 });
 
-server.listen(PORT, () => console.log(`AIM LONG service form is running at http://localhost:${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`AIM LONG service form is running on port ${PORT}${supabase ? ' with Supabase storage' : ''}`));

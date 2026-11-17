@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "description": "Local endpoint for AIM LONG SPARES AND REPAIRS service requests",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
     "dotenv": "^18.0.10",
     "nodemailer": "^10.5.0"
   }
