@@ -7,6 +7,7 @@ create table if not exists public.service_requests (
     email text not null,
     service text not null check (service in ('repair', 'maintenance', 'installation', 'inspection', 'other')),
     location text,
+    mileage integer check (mileage is null or mileage between 0 and 9999999),
     problem text not null,
     availability text,
     photos jsonb not null default '[]'::jsonb
